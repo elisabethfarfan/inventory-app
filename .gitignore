@@ -1,0 +1,40 @@
+
+# Java y Spring Boot
+*.class
+*.jar
+*.war
+target/
+build/
+.gradle/
+.idea/
+*.iml
+
+# Configuracion local y secretos
+.env
+.env.*
+!.env.example
+application-local.properties
+application-dev.properties
+application-prod.properties
+secrets/
+*.pem
+*.key
+
+# Node.js y React
+node_modules/
+dist/
+.vite/
+coverage/
+npm-debug.log*
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+# Configuracion local de PostgreSQL con credenciales
+/backend/src/main/resources/application.properties
