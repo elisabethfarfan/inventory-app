@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Plus, TriangleAlert } from "lucide-react";
 import { useProductRows } from "../features/products/useProductRows";
+import { useSetProductActive } from "../features/products/useProducts";
 import ProductTable from "../features/products/ProductTable";
 import ProductForm from "../features/products/ProductForm";
 import ProductFilters, {
@@ -9,11 +10,12 @@ import ProductFilters, {
 import MovementForm from "../features/stock/MovementForm";
 import Modal from "../components/ui/Modal";
 import { useDebounce } from "../hooks/useDebounce";
-import type { ProductRow } from "../types/product";
+import type { Product, ProductRow } from "../types/product";
 import type { MovementType } from "../types/stock";
 
 export default function ProductsPage() {
   const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Product | null>(null);
   const [movement, setMovement] = useState<{
     product: ProductRow;
     type: MovementType;
@@ -23,6 +25,7 @@ export default function ProductsPage() {
 
   const debouncedSearch = useDebounce(search);
   const { rows, isLoading, isError, error } = useProductRows();
+  const toggleActive = useSetProductActive();
 
   const filtered = useMemo(() => {
     if (!rows) return [];
@@ -69,6 +72,12 @@ export default function ProductsPage() {
         </div>
       )}
 
+      {toggleActive.isError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {toggleActive.error.message}
+        </div>
+      )}
+
       {hasProducts && (
         <ProductFilters
           search={search}
@@ -106,12 +115,34 @@ export default function ProductsPage() {
           <ProductTable
             products={filtered}
             onMove={(product, type) => setMovement({ product, type })}
+            onEdit={(product) => setEditing(product)}
+            onToggleActive={(product) =>
+              toggleActive.mutate({ id: product.id, value: !product.active })
+            }
           />
         </>
       )}
 
-      <Modal open={modalOpen} title="Nuevo producto" onClose={() => setModalOpen(false)}>
+      <Modal
+        open={modalOpen}
+        title="Nuevo producto"
+        onClose={() => setModalOpen(false)}
+      >
         <ProductForm onSuccess={() => setModalOpen(false)} />
+      </Modal>
+
+      <Modal
+        open={editing !== null}
+        title="Editar producto"
+        onClose={() => setEditing(null)}
+      >
+        {editing && (
+          <ProductForm
+            key={editing.id}
+            product={editing}
+            onSuccess={() => setEditing(null)}
+          />
+        )}
       </Modal>
 
       <Modal

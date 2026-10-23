@@ -1,23 +1,46 @@
 import { useForm } from "react-hook-form";
 import Input from "../../components/ui/Input";
-import { useCreateProduct } from "./useProducts";
-import type { ProductInput } from "../../types/product";
+import { useCreateProduct, useUpdateProduct } from "./useProducts";
+import type { Product, ProductInput } from "../../types/product";
 
 interface ProductFormProps {
+  product?: Product; // si viene, es edición
   onSuccess: () => void;
 }
 
-export default function ProductForm({ onSuccess }: ProductFormProps) {
+export default function ProductForm({ product, onSuccess }: ProductFormProps) {
+  const isEdit = !!product;
+
   const { register, handleSubmit, formState: { errors } } = useForm<ProductInput>({
-    defaultValues: { active: true },
+    defaultValues: product
+      ? {
+          code: product.code,
+          name: product.name,
+          description: product.description ?? "",
+          barcode: product.barcode ?? "",
+          price: product.price,
+          active: product.active,
+        }
+      : { active: true },
   });
-  const { mutate, isPending, error } = useCreateProduct();
+
+  const create = useCreateProduct();
+  const update = useUpdateProduct();
+  const { isPending, error } = isEdit ? update : create;
 
   const onSubmit = (data: ProductInput) => {
-    mutate(
-      { ...data, price: Number(data.price), barcode: data.barcode || null },
-      { onSuccess }
-    );
+    const payload: ProductInput = {
+      ...data,
+      price: Number(data.price),
+      barcode: data.barcode || null,
+      description: data.description || null,
+    };
+
+    if (product) {
+      update.mutate({ id: product.id, data: payload }, { onSuccess });
+    } else {
+      create.mutate(payload, { onSuccess });
+    }
   };
 
   return (
@@ -28,10 +51,7 @@ export default function ProductForm({ onSuccess }: ProductFormProps) {
           {...register("code", { required: "El código es obligatorio" })}
           error={errors.code?.message}
         />
-        <Input
-          label="Código de barras"
-          {...register("barcode")}
-        />
+        <Input label="Código de barras" {...register("barcode")} />
       </div>
 
       <Input
@@ -67,7 +87,7 @@ export default function ProductForm({ onSuccess }: ProductFormProps) {
           disabled={isPending}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
-          {isPending ? "Guardando..." : "Guardar producto"}
+          {isPending ? "Guardando..." : isEdit ? "Guardar cambios" : "Guardar producto"}
         </button>
       </div>
     </form>

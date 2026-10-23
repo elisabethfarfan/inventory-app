@@ -1,4 +1,4 @@
-import { ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Pencil } from "lucide-react";
 import Badge from "../../components/ui/Badge";
 import type { ProductRow } from "../../types/product";
 import type { MovementType } from "../../types/stock";
@@ -6,6 +6,8 @@ import type { MovementType } from "../../types/stock";
 interface ProductTableProps {
   products: ProductRow[];
   onMove: (product: ProductRow, type: MovementType) => void;
+  onEdit: (product: ProductRow) => void;
+  onToggleActive: (product: ProductRow) => void;
 }
 
 const formatPrice = (value: number) =>
@@ -17,7 +19,12 @@ function StockBadge({ stock, minimum }: { stock: number; minimum: number }) {
   return <span className="font-medium text-slate-700">{stock}</span>;
 }
 
-export default function ProductTable({ products, onMove }: ProductTableProps) {
+export default function ProductTable({
+  products,
+  onMove,
+  onEdit,
+  onToggleActive,
+}: ProductTableProps) {
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full text-left text-sm">
@@ -30,7 +37,7 @@ export default function ProductTable({ products, onMove }: ProductTableProps) {
             <th className="px-4 py-3 text-right">Stock</th>
             <th className="px-4 py-3 text-right">Mínimo</th>
             <th className="px-4 py-3">Estado</th>
-            <th className="px-4 py-3 text-right">Movimiento</th>
+            <th className="px-4 py-3 text-right">Acciones</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -50,24 +57,37 @@ export default function ProductTable({ products, onMove }: ProductTableProps) {
               </td>
               <td className="px-4 py-3 text-right text-slate-500">{p.minimumStock}</td>
               <td className="px-4 py-3">
-                <Badge variant={p.active ? "success" : "neutral"}>
-                  {p.active ? "Activo" : "Inactivo"}
-                </Badge>
+                <button
+                  onClick={() => onToggleActive(p)}
+                  title={p.active ? "Clic para desactivar" : "Clic para activar"}
+                >
+                  <Badge variant={p.active ? "success" : "neutral"}>
+                    {p.active ? "Activo" : "Inactivo"}
+                  </Badge>
+                </button>
               </td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => onMove(p, "IN")}
-                    className="flex items-center gap-1 rounded-lg border border-green-200 px-2.5 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50"
+                    disabled={!p.active}
+                    className="flex items-center gap-1 rounded-lg border border-green-200 px-2.5 py-1.5 text-xs font-medium text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <ArrowDownToLine size={14} /> Entrada
                   </button>
                   <button
                     onClick={() => onMove(p, "OUT")}
-                    disabled={p.stock === 0}
+                    disabled={!p.active || p.stock === 0}
                     className="flex items-center gap-1 rounded-lg border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <ArrowUpFromLine size={14} /> Salida
+                  </button>
+                  <button
+                    onClick={() => onEdit(p)}
+                    title="Editar producto"
+                    className="flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <Pencil size={14} /> Editar
                   </button>
                 </div>
               </td>
