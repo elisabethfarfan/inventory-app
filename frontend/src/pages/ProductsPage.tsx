@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Plus, TriangleAlert } from "lucide-react";
+import { Download, Plus, TriangleAlert } from "lucide-react";
 import { useProductRows } from "../features/products/useProductRows";
 import { useSetProductActive } from "../features/products/useProducts";
 import ProductTable from "../features/products/ProductTable";
@@ -9,11 +9,16 @@ import ProductFilters, {
 } from "../features/products/ProductFilters";
 import MovementForm from "../features/stock/MovementForm";
 import Modal from "../components/ui/Modal";
+import { useAuth } from "../features/auth/AuthContext";
 import { useDebounce } from "../hooks/useDebounce";
+import { downloadProducts } from "../api/reports";
 import type { Product, ProductRow } from "../types/product";
 import type { MovementType } from "../types/stock";
 
 export default function ProductsPage() {
+  const { session } = useAuth();
+  const isAdmin = session?.role === "ADMIN";
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [movement, setMovement] = useState<{
@@ -22,6 +27,7 @@ export default function ProductsPage() {
   } | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const debouncedSearch = useDebounce(search);
   const { rows, isLoading, isError, error } = useProductRows();
@@ -50,18 +56,44 @@ export default function ProductsPage() {
 
   const hasProducts = !!rows && rows.length > 0;
 
+  const exportProducts = async () => {
+    setExportError(null);
+    try {
+      await downloadProducts();
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "No se pudo descargar el Excel");
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800">Productos</h2>
-        <button
-          onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          <Plus size={18} />
-          Nuevo producto
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={exportProducts}
+            className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            <Download size={18} />
+            Excel de productos
+          </button>
+          {isAdmin && (
+            <button
+              onClick={() => setModalOpen(true)}
+              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              <Plus size={18} />
+              Nuevo producto
+            </button>
+          )}
+        </div>
       </div>
+
+      {exportError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {exportError}
+        </div>
+      )}
 
       {lowStockCount > 0 && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -114,6 +146,7 @@ export default function ProductsPage() {
           </p>
           <ProductTable
             products={filtered}
+            canEdit={isAdmin}
             onMove={(product, type) => setMovement({ product, type })}
             onEdit={(product) => setEditing(product)}
             onToggleActive={(product) =>
@@ -123,27 +156,31 @@ export default function ProductsPage() {
         </>
       )}
 
-      <Modal
-        open={modalOpen}
-        title="Nuevo producto"
-        onClose={() => setModalOpen(false)}
-      >
-        <ProductForm onSuccess={() => setModalOpen(false)} />
-      </Modal>
+      {isAdmin && (
+        <>
+          <Modal
+            open={modalOpen}
+            title="Nuevo producto"
+            onClose={() => setModalOpen(false)}
+          >
+            <ProductForm onSuccess={() => setModalOpen(false)} />
+          </Modal>
 
-      <Modal
-        open={editing !== null}
-        title="Editar producto"
-        onClose={() => setEditing(null)}
-      >
-        {editing && (
-          <ProductForm
-            key={editing.id}
-            product={editing}
-            onSuccess={() => setEditing(null)}
-          />
-        )}
-      </Modal>
+          <Modal
+            open={editing !== null}
+            title="Editar producto"
+            onClose={() => setEditing(null)}
+          >
+            {editing && (
+              <ProductForm
+                key={editing.id}
+                product={editing}
+                onSuccess={() => setEditing(null)}
+              />
+            )}
+          </Modal>
+        </>
+      )}
 
       <Modal
         open={movement !== null}

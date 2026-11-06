@@ -56,6 +56,7 @@ export default function MovementsPage() {
                 <th className="px-4 py-3">Tipo</th>
                 <th className="px-4 py-3 text-right">Cantidad</th>
                 <th className="px-4 py-3 text-right">Stock</th>
+                <th className="px-4 py-3">Registrado por</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -81,6 +82,9 @@ export default function MovementsPage() {
                     </td>
                     <td className="px-4 py-3 text-right text-slate-600">
                       {m.previousStock} → <strong>{m.newStock}</strong>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      {m.registeredBy ?? "—"}
                     </td>
                   </tr>
                 );

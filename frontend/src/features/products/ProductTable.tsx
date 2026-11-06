@@ -5,6 +5,7 @@ import type { MovementType } from "../../types/stock";
 
 interface ProductTableProps {
   products: ProductRow[];
+  canEdit: boolean;
   onMove: (product: ProductRow, type: MovementType) => void;
   onEdit: (product: ProductRow) => void;
   onToggleActive: (product: ProductRow) => void;
@@ -21,6 +22,7 @@ function StockBadge({ stock, minimum }: { stock: number; minimum: number }) {
 
 export default function ProductTable({
   products,
+  canEdit,
   onMove,
   onEdit,
   onToggleActive,
@@ -33,7 +35,10 @@ export default function ProductTable({
             <th className="px-4 py-3">Código</th>
             <th className="px-4 py-3">Nombre</th>
             <th className="px-4 py-3">Código de barras</th>
-            <th className="px-4 py-3 text-right">Precio</th>
+            {canEdit && <th className="px-4 py-3 text-right">Costo</th>}
+            <th className="px-4 py-3 text-right">Precio lista</th>
+            <th className="px-4 py-3 text-right">Mín. venta</th>
+            {canEdit && <th className="px-4 py-3 text-right">Ganancia</th>}
             <th className="px-4 py-3 text-right">Stock</th>
             <th className="px-4 py-3 text-right">Mínimo</th>
             <th className="px-4 py-3">Estado</th>
@@ -51,21 +56,47 @@ export default function ProductTable({
                 )}
               </td>
               <td className="px-4 py-3 text-slate-600">{p.barcode ?? "—"}</td>
+
+              {canEdit && (
+                <td className="px-4 py-3 text-right text-slate-600">
+                  {p.cost != null ? formatPrice(p.cost) : "—"}
+                </td>
+              )}
+
               <td className="px-4 py-3 text-right">{formatPrice(p.price)}</td>
+
+              <td className="px-4 py-3 text-right text-slate-600">
+                {p.minPrice != null ? formatPrice(p.minPrice) : "—"}
+              </td>
+
+              {canEdit && (
+                <td className="px-4 py-3 text-right font-medium text-green-600">
+                  {p.profitPerUnit != null ? formatPrice(p.profitPerUnit) : "—"}
+                </td>
+              )}
+
               <td className="px-4 py-3 text-right">
                 <StockBadge stock={p.stock} minimum={p.minimumStock} />
               </td>
               <td className="px-4 py-3 text-right text-slate-500">{p.minimumStock}</td>
+
               <td className="px-4 py-3">
-                <button
-                  onClick={() => onToggleActive(p)}
-                  title={p.active ? "Clic para desactivar" : "Clic para activar"}
-                >
+                {canEdit ? (
+                  <button
+                    onClick={() => onToggleActive(p)}
+                    title={p.active ? "Clic para desactivar" : "Clic para activar"}
+                  >
+                    <Badge variant={p.active ? "success" : "neutral"}>
+                      {p.active ? "Activo" : "Inactivo"}
+                    </Badge>
+                  </button>
+                ) : (
                   <Badge variant={p.active ? "success" : "neutral"}>
                     {p.active ? "Activo" : "Inactivo"}
                   </Badge>
-                </button>
+                )}
               </td>
+
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-2">
                   <button
@@ -82,13 +113,15 @@ export default function ProductTable({
                   >
                     <ArrowUpFromLine size={14} /> Salida
                   </button>
-                  <button
-                    onClick={() => onEdit(p)}
-                    title="Editar producto"
-                    className="flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    <Pencil size={14} /> Editar
-                  </button>
+                  {canEdit && (
+                    <button
+                      onClick={() => onEdit(p)}
+                      title="Editar producto"
+                      className="flex items-center gap-1 rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      <Pencil size={14} /> Editar
+                    </button>
+                  )}
                 </div>
               </td>
             </tr>

@@ -9,5 +9,6 @@ export interface StockMovement {
   quantity: number;
   previousStock: number;
   newStock: number;
+  registeredBy: string | null;
   createdAt: string;
 }
