@@ -20,3 +20,6 @@ export const getSales = (filters: SaleFilters) =>
       },
     })
     .then((r) => r.data);
+
+  export const cancelSale = (id: number, reason: string) =>
+  api.post<Sale>(`/sales/${id}/cancel`, { reason }).then((r) => r.data);

@@ -1,16 +1,19 @@
 import { useMemo, useState } from "react";
-import { Download, Plus, TriangleAlert } from "lucide-react";
+import { Download, Plus, TriangleAlert, Upload } from "lucide-react";
 import { useProductRows } from "../features/products/useProductRows";
 import { useSetProductActive } from "../features/products/useProducts";
 import ProductTable from "../features/products/ProductTable";
 import ProductForm from "../features/products/ProductForm";
+import ImportProducts from "../features/products/ImportProducts";
 import ProductFilters, {
   type StatusFilter,
 } from "../features/products/ProductFilters";
 import MovementForm from "../features/stock/MovementForm";
 import Modal from "../components/ui/Modal";
+import Pagination from "../components/ui/Pagination";
 import { useAuth } from "../features/auth/AuthContext";
 import { useDebounce } from "../hooks/useDebounce";
+import { usePagination } from "../hooks/usePagination";
 import { downloadProducts } from "../api/reports";
 import type { Product, ProductRow } from "../types/product";
 import type { MovementType } from "../types/stock";
@@ -20,6 +23,7 @@ export default function ProductsPage() {
   const isAdmin = session?.role === "ADMIN";
 
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [movement, setMovement] = useState<{
     product: ProductRow;
@@ -49,6 +53,8 @@ export default function ProductsPage() {
     });
   }, [rows, debouncedSearch, status]);
 
+  const pager = usePagination(filtered, 20);
+
   const lowStockCount = useMemo(
     () => rows?.filter((p) => p.active && p.stock <= p.minimumStock).length ?? 0,
     [rows]
@@ -67,9 +73,9 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-2xl font-bold text-slate-800">Productos</h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={exportProducts}
             className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
@@ -78,13 +84,22 @@ export default function ProductsPage() {
             Excel de productos
           </button>
           {isAdmin && (
-            <button
-              onClick={() => setModalOpen(true)}
-              className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              <Plus size={18} />
-              Nuevo producto
-            </button>
+            <>
+              <button
+                onClick={() => setImportOpen(true)}
+                className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <Upload size={18} />
+                Importar Excel
+              </button>
+              <button
+                onClick={() => setModalOpen(true)}
+                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                <Plus size={18} />
+                Nuevo producto
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -130,6 +145,7 @@ export default function ProductsPage() {
       {rows && rows.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">
           Aún no hay productos registrados.
+          {isAdmin && " Puedes cargarlos con «Importar Excel» o con «Nuevo producto»."}
         </div>
       )}
 
@@ -145,13 +161,20 @@ export default function ProductsPage() {
             {filtered.length} de {rows?.length} productos
           </p>
           <ProductTable
-            products={filtered}
+            products={pager.pageItems}
             canEdit={isAdmin}
             onMove={(product, type) => setMovement({ product, type })}
             onEdit={(product) => setEditing(product)}
             onToggleActive={(product) =>
               toggleActive.mutate({ id: product.id, value: !product.active })
             }
+          />
+          <Pagination
+            page={pager.page}
+            totalPages={pager.totalPages}
+            total={pager.total}
+            pageSize={pager.pageSize}
+            onChange={pager.setPage}
           />
         </>
       )}
@@ -178,6 +201,14 @@ export default function ProductsPage() {
                 onSuccess={() => setEditing(null)}
               />
             )}
+          </Modal>
+
+          <Modal
+            open={importOpen}
+            title="Importar productos desde Excel"
+            onClose={() => setImportOpen(false)}
+          >
+            {importOpen && <ImportProducts onDone={() => setImportOpen(false)} />}
           </Modal>
         </>
       )}

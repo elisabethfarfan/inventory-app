@@ -8,6 +8,7 @@ import MovementsPage from "./pages/MovementsPage";
 import UsersPage from "./pages/UsersPage";
 import SalesPage from "./pages/SalesPage";
 import ContainersPage from "./pages/ContainersPage";
+import BorrowingsPage from "./pages/BorrowingsPage";
 
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
            <Route path="/usuarios" element={<UsersPage />} />
           <Route path="/ventas" element={<SalesPage />} />
           <Route path="/baldes" element={<ContainersPage />} />
+          <Route path="/prestamos" element={<BorrowingsPage />} />
         </Route>
       </Route>
     </Routes>

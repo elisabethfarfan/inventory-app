@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 public interface OpenContainerRepository extends JpaRepository<OpenContainer, Long> {
 
@@ -26,4 +27,8 @@ public interface OpenContainerRepository extends JpaRepository<OpenContainer, Lo
             """)
     List<OpenContainer> findUsable(@Param("productId") Long productId,
                                    @Param("amount") BigDecimal amount);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM OpenContainer c WHERE c.id = :id")
+    Optional<OpenContainer> findForUpdateById(@Param("id") Long id);
 }

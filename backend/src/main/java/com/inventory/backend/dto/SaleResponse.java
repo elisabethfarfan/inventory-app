@@ -18,6 +18,9 @@ public record SaleResponse(
         SaleStatus status,
         String soldBy,
         LocalDateTime createdAt,
+        String cancelledBy,
+        LocalDateTime cancelledAt,
+        String cancelReason,
         BigDecimal totalDiscount,
         BigDecimal totalProfit,      // solo ADMIN
         List<Item> items
@@ -30,6 +33,7 @@ public record SaleResponse(
             Integer quantity,
             String fractionLabel,
             Long containerId,
+            String externalFrom,         // tienda de origen, si fue prestado
             BigDecimal listPrice,
             BigDecimal minPrice,
             BigDecimal unitPrice,
@@ -71,12 +75,14 @@ public record SaleResponse(
                     i.getProduct().getName(), i.getQuantity(),
                     i.getFraction() != null ? i.getFraction().getLabel() : null,
                     i.getContainerId(),
+                    i.getExternalPartnerName(),
                     list, i.getMinPrice(), i.getUnitPrice(), disc, pct,
                     i.getDiscountReason(), i.getSubtotal(), cost, profit));
         }
 
         return new SaleResponse(s.getId(), s.getCustomerName(), s.getPaymentMethod(),
                 s.getNote(), s.getTotal(), s.getStatus(), s.getSoldBy(), s.getCreatedAt(),
+                s.getCancelledBy(), s.getCancelledAt(), s.getCancelReason(),
                 totalDiscount, (admin && hayCosto) ? totalProfit : null, items);
     }
 }

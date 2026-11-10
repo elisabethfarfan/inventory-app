@@ -110,6 +110,25 @@ public class StockService {
         return registrarSalida(productId, 1, saleId, containerId);
     }
 
+    // Devuelve unidades al stock por una anulación (no exige producto activo)
+    @Transactional
+    public Stock reponer(Long productId, int cantidad, Long saleId) {
+        validarCantidad(cantidad);
+
+        Stock stock = stockRepository.findByProductIdForUpdate(productId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "El producto no tiene stock registrado"));
+
+        int stockAnterior = stock.getQuantity();
+        int stockNuevo = stockAnterior + cantidad;
+        stock.setQuantity(stockNuevo);
+        Stock guardado = stockRepository.save(stock);
+
+        registrarMovimiento(stock.getProduct(), "ENTRADA", cantidad,
+                stockAnterior, stockNuevo, saleId, null);
+        return guardado;
+    }
+
     @Transactional(readOnly = true)
     public Stock consultarStock(Long productId) {
         return stockRepository.findByProductId(productId)

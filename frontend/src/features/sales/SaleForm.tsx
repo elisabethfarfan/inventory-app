@@ -3,15 +3,18 @@ import { Trash2 } from "lucide-react";
 import { useProductRows } from "../products/useProductRows";
 import { useCreateSale } from "./useSales";
 import { useAuth } from "../auth/AuthContext";
+import { useCreatePartner, usePartners } from "../partners/usePartners";
 import type { FractionCode, ProductRow } from "../../types/product";
 import type { PaymentMethod } from "../../types/sale";
 
 interface Line {
   productId: number;
-  fraction: FractionCode | null; // null = entero
+  fraction: FractionCode | null;
   quantity: string;
   unitPrice: string;
   reason: string;
+  partnerId: number | null; // null = stock propio
+  externalCost: string;
 }
 
 const fmt = (v: number) =>
@@ -35,15 +38,19 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
   const isAdmin = session?.role === "ADMIN";
   const { rows } = useProductRows();
   const create = useCreateSale();
+  const partners = usePartners();
+  const createPartner = useCreatePartner();
 
   const [search, setSearch] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [customer, setCustomer] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("EFECTIVO");
   const [note, setNote] = useState("");
+  const [newStore, setNewStore] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
   const byId = useMemo(() => new Map(rows?.map((p) => [p.id, p])), [rows]);
+  const firstPartner = partners.data?.[0]?.id ?? 0;
 
   const term = search.trim().toLowerCase();
   const matches = useMemo(() => {
@@ -52,7 +59,6 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
       .filter(
         (p) =>
           p.active &&
-          p.stock > 0 &&
           !lines.some((l) => l.productId === p.id) &&
           (p.name.toLowerCase().includes(term) ||
             p.code.toLowerCase().includes(term) ||
@@ -64,23 +70,27 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
   const addProduct = (id: number) => {
     const p = byId.get(id);
     if (!p) return;
+    const sinStock = p.stock <= 0 && !p.fractionable;
     setLines((ls) => [
       ...ls,
-      { productId: id, fraction: null, quantity: "1", unitPrice: String(p.price), reason: "" },
+      {
+        productId: id,
+        fraction: null,
+        quantity: "1",
+        unitPrice: String(p.price),
+        reason: "",
+        partnerId: sinStock ? firstPartner : null,
+        externalCost: "",
+      },
     ]);
     setSearch("");
   };
 
-  // Un lector de código de barras escribe el código y pulsa Enter
   const onSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
     const exact = rows?.find(
-      (p) =>
-        p.barcode === search.trim() &&
-        p.active &&
-        p.stock > 0 &&
-        !lines.some((l) => l.productId === p.id)
+      (p) => p.barcode === search.trim() && p.active && !lines.some((l) => l.productId === p.id)
     );
     if (exact) addProduct(exact.id);
     else if (matches.length === 1) addProduct(matches[0].id);
@@ -111,9 +121,19 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
       const q = Number(l.quantity);
       const price = Number(l.unitPrice);
       if (!Number.isInteger(q) || q < 1) return setLocalError(`Cantidad inválida en ${p.name}`);
-      // En fracciones, el stock disponible lo valida el backend
-      if (!l.fraction && q > p.stock) return setLocalError(`${p.name}: solo hay ${p.stock} en stock`);
       if (!(price > 0)) return setLocalError(`Precio inválido en ${p.name}`);
+
+      if (l.partnerId !== null) {
+        if (l.partnerId === 0) return setLocalError("Agrega una tienda primero");
+        const cost = Number(l.externalCost);
+        if (!(cost > 0)) return setLocalError(`${p.name}: indica el costo que te cobra la tienda`);
+        if (!isAdmin && price < cost)
+          return setLocalError(`${p.name}: no puedes vender bajo el costo de la tienda (${fmt(cost)})`);
+        continue;
+      }
+
+      if (!l.fraction && q > p.stock)
+        return setLocalError(`${p.name}: solo hay ${p.stock} en stock (puedes conseguirlo en otra tienda)`);
       const { floor } = priceFor(p, l.fraction);
       if (!isAdmin && price < floor)
         return setLocalError(`${p.name}: el precio mínimo es ${fmt(floor)}`);
@@ -129,7 +149,9 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
           quantity: Number(l.quantity),
           unitPrice: Number(l.unitPrice),
           discountReason: l.reason.trim() || null,
-          fraction: l.fraction,
+          fraction: l.partnerId !== null ? null : l.fraction,
+          partnerId: l.partnerId,
+          externalCost: l.partnerId !== null ? Number(l.externalCost) : null,
         })),
       },
       { onSuccess }
@@ -160,8 +182,9 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
                     <span className="font-medium text-slate-800">{p.name}</span>{" "}
                     <span className="font-mono text-xs text-slate-500">{p.code}</span>
                   </span>
-                  <span className="text-slate-500">
-                    {fmt(p.price)} · stock {p.stock}
+                  <span className={p.stock > 0 ? "text-slate-500" : "text-amber-600"}>
+                    {fmt(p.price)} ·{" "}
+                    {p.stock > 0 ? `stock ${p.stock}` : "Sin stock · conseguir en otra tienda"}
                   </span>
                 </button>
               </li>
@@ -179,8 +202,11 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
           {lines.map((l, i) => {
             const p = byId.get(l.productId);
             if (!p) return null;
+            const external = l.partnerId !== null;
             const price = Number(l.unitPrice) || 0;
-            const { list, floor } = priceFor(p, l.fraction);
+            const base = priceFor(p, external ? null : l.fraction);
+            const list = base.list;
+            const floor = external ? Number(l.externalCost) || 0 : base.floor;
             const diff = list - price;
             const pct = list > 0 ? (diff / list) * 100 : 0;
             const belowFloor = price < floor;
@@ -192,8 +218,12 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
                   <div>
                     <div className="text-sm font-medium text-slate-800">{p.name}</div>
                     <div className="text-xs text-slate-500">
-                      Lista {fmt(list)} · Mínimo {fmt(floor)} · Stock {p.stock}
-                      {l.fraction ? " baldes cerrados" : ""}
+                      Lista {fmt(list)}
+                      {external
+                        ? " · Origen: otra tienda"
+                        : ` · Mínimo ${fmt(floor)} · Stock ${p.stock}${
+                            l.fraction ? " baldes cerrados" : ""
+                          }`}
                     </div>
                   </div>
                   <button
@@ -206,7 +236,7 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
                   </button>
                 </div>
 
-                {p.fractionable && (
+                {p.fractionable && !external && (
                   <select
                     value={l.fraction ?? ""}
                     onChange={(e) => {
@@ -224,13 +254,59 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
                   </select>
                 )}
 
+                <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={external}
+                    onChange={(e) =>
+                      update(i, {
+                        partnerId: e.target.checked ? firstPartner : null,
+                        fraction: null,
+                        unitPrice: String(p.price),
+                      })
+                    }
+                  />
+                  Conseguir en otra tienda
+                </label>
+
+                {external && (
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    <label className="text-xs text-slate-500">
+                      Tienda
+                      <select
+                        value={l.partnerId ?? 0}
+                        onChange={(e) => update(i, { partnerId: Number(e.target.value) })}
+                        className={input}
+                      >
+                        {(partners.data?.length ?? 0) === 0 && <option value={0}>Sin tiendas</option>}
+                        {partners.data?.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-xs text-slate-500">
+                      Costo que te cobran (por unidad)
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={l.externalCost}
+                        onChange={(e) => update(i, { externalCost: e.target.value })}
+                        className={input}
+                      />
+                    </label>
+                  </div>
+                )}
+
                 <div className="mt-3 grid grid-cols-3 gap-3">
                   <label className="text-xs text-slate-500">
                     {l.fraction ? "Porciones" : "Cantidad"}
                     <input
                       type="number"
                       min={1}
-                      max={l.fraction ? undefined : p.stock}
+                      max={l.fraction || external ? undefined : p.stock}
                       value={l.quantity}
                       onChange={(e) => update(i, { quantity: e.target.value })}
                       className={input}
@@ -255,7 +331,14 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
                   </div>
                 </div>
 
-                {discounted && (
+                {external && belowFloor && (
+                  <div className="mt-2 text-xs text-red-600">
+                    Por debajo del costo de la tienda
+                    {isAdmin ? " · autorizado por ser administrador" : " · no se podrá registrar"}
+                  </div>
+                )}
+
+                {!external && discounted && (
                   <div className={`mt-2 text-xs ${belowFloor ? "text-red-600" : "text-amber-600"}`}>
                     Rebaja de {fmt(diff)} por unidad ({pct.toFixed(1)} %)
                     {belowFloor &&
@@ -305,6 +388,30 @@ export default function SaleForm({ onSuccess }: { onSuccess: () => void }) {
         Nota (opcional)
         <input value={note} onChange={(e) => setNote(e.target.value)} className={input} />
       </label>
+
+      <div>
+        <div className="flex gap-2">
+          <input
+            value={newStore}
+            onChange={(e) => setNewStore(e.target.value)}
+            placeholder="Nueva tienda aliada..."
+            className={input}
+          />
+          <button
+            type="button"
+            disabled={newStore.trim() === "" || createPartner.isPending}
+            onClick={() =>
+              createPartner.mutate({ name: newStore.trim() }, { onSuccess: () => setNewStore("") })
+            }
+            className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 disabled:opacity-50"
+          >
+            Agregar tienda
+          </button>
+        </div>
+        {createPartner.error && (
+          <p className="mt-1 text-xs text-red-600">{createPartner.error.message}</p>
+        )}
+      </div>
 
       {(localError || create.error) && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">

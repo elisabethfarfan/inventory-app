@@ -1,11 +1,13 @@
 package com.inventory.backend.controller;
 
+import com.inventory.backend.dto.CancelSaleRequest;
 import com.inventory.backend.dto.SaleRequest;
 import com.inventory.backend.dto.SaleResponse;
 import com.inventory.backend.service.SaleService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -38,5 +40,12 @@ public class SaleController {
     @GetMapping("/{id}")
     public SaleResponse buscar(@PathVariable Long id) {
         return saleService.buscar(id);
+    }
+
+    @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasRole('ADMIN')")
+    public SaleResponse anular(@PathVariable Long id,
+                               @Valid @RequestBody CancelSaleRequest request) {
+        return saleService.anular(id, request);
     }
 }

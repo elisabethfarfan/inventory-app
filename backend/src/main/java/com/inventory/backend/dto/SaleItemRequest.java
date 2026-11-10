@@ -20,5 +20,11 @@ public record SaleItemRequest(
         String discountReason,
 
         // null = balde/unidad entera
-        Fraction fraction
+        Fraction fraction,
+
+        // Si viene, el producto se consigue en esa tienda (no sale de tu stock)
+        Long partnerId,
+
+        @DecimalMin(value = "0.0", inclusive = false, message = "El costo de la tienda debe ser mayor que cero")
+        BigDecimal externalCost
 ) {}

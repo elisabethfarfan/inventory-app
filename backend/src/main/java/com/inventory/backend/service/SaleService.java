@@ -1,11 +1,14 @@
 package com.inventory.backend.service;
 
+import com.inventory.backend.dto.CancelSaleRequest;
 import com.inventory.backend.dto.SaleItemRequest;
 import com.inventory.backend.dto.SaleRequest;
 import com.inventory.backend.dto.SaleResponse;
 import com.inventory.backend.entity.*;
 import com.inventory.backend.exception.ResourceNotFoundException;
+import com.inventory.backend.repository.BorrowingRepository;
 import com.inventory.backend.repository.OpenContainerRepository;
+import com.inventory.backend.repository.PartnerRepository;
 import com.inventory.backend.repository.ProductRepository;
 import com.inventory.backend.repository.SaleRepository;
 import com.inventory.backend.security.CurrentUser;
@@ -21,7 +24,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -30,15 +35,21 @@ public class SaleService {
     private final SaleRepository saleRepository;
     private final ProductRepository productRepository;
     private final OpenContainerRepository containerRepository;
+    private final PartnerRepository partnerRepository;
+    private final BorrowingRepository borrowingRepository;
     private final StockService stockService;
 
     public SaleService(SaleRepository saleRepository,
                        ProductRepository productRepository,
                        OpenContainerRepository containerRepository,
+                       PartnerRepository partnerRepository,
+                       BorrowingRepository borrowingRepository,
                        StockService stockService) {
         this.saleRepository = saleRepository;
         this.productRepository = productRepository;
         this.containerRepository = containerRepository;
+        this.partnerRepository = partnerRepository;
+        this.borrowingRepository = borrowingRepository;
         this.stockService = stockService;
     }
 
@@ -54,7 +65,7 @@ public class SaleService {
 
         Set<String> vistos = new HashSet<>();
         for (SaleItemRequest line : lines) {
-            String clave = line.productId() + "-" + line.fraction();
+            String clave = line.productId() + "-" + line.fraction() + "-" + line.partnerId();
             if (!vistos.add(clave)) {
                 throw new IllegalArgumentException(
                         "El producto " + line.productId()
@@ -69,6 +80,7 @@ public class SaleService {
         sale.setSoldBy(usuario);
 
         BigDecimal total = BigDecimal.ZERO;
+        Map<SaleItem, Partner> externas = new IdentityHashMap<>();
 
         for (SaleItemRequest line : lines) {
             Product product = productRepository.findById(line.productId())
@@ -81,8 +93,33 @@ public class SaleService {
             BigDecimal floor;
             BigDecimal cost = product.getCost();
             Fraction fraction = line.fraction();
+            Partner partner = null;
 
-            if (fraction != null) {
+            if (line.partnerId() != null) {
+                // Producto conseguido en otra tienda
+                if (fraction != null) {
+                    throw new IllegalArgumentException(
+                            "Un producto de otra tienda no se puede vender fraccionado");
+                }
+                if (line.externalCost() == null) {
+                    throw new IllegalArgumentException(
+                            "Indica el costo que te cobra la tienda por " + product.getName());
+                }
+                if (!Boolean.TRUE.equals(product.getActive())) {
+                    throw new IllegalArgumentException(
+                            "No se puede vender un producto inactivo: " + product.getName());
+                }
+                partner = partnerRepository.findById(line.partnerId())
+                        .orElseThrow(() -> new ResourceNotFoundException(
+                                "Tienda no encontrada: " + line.partnerId()));
+                if (!partner.getActive()) {
+                    throw new IllegalArgumentException(
+                            "La tienda \"" + partner.getName() + "\" está desactivada");
+                }
+                cost = line.externalCost().setScale(2, RoundingMode.HALF_UP);
+                listPrice = product.getPrice();
+                floor = cost; // no se puede vender por debajo de lo que debes
+            } else if (fraction != null) {
                 if (!Boolean.TRUE.equals(product.getFractionable())) {
                     throw new IllegalArgumentException(
                             product.getName() + " no se vende fraccionado");
@@ -105,9 +142,10 @@ public class SaleService {
             }
 
             if (!admin && unitPrice.compareTo(floor) < 0) {
+                String detalle = partner != null ? " (costo de la tienda)"
+                        : (fraction != null ? " (" + fraction.getLabel() + ")" : "");
                 throw new IllegalArgumentException(
-                        "El precio mínimo de " + product.getName()
-                                + (fraction != null ? " (" + fraction.getLabel() + ")" : "")
+                        "El precio mínimo de " + product.getName() + detalle
                                 + " es S/ " + floor.setScale(2, RoundingMode.HALF_UP));
             }
 
@@ -123,6 +161,10 @@ public class SaleService {
             item.setFraction(fraction);
             item.setDiscountReason(blankToNull(line.discountReason()));
             item.setSubtotal(subtotal);
+            if (partner != null) {
+                item.setExternalPartnerName(partner.getName());
+                externas.put(item, partner);
+            }
             sale.addItem(item);
 
             total = total.add(subtotal);
@@ -131,9 +173,21 @@ public class SaleService {
         sale.setTotal(total);
         Sale saved = saleRepository.save(sale);
 
-        // Descuenta del inventario. Si algo falla, se revierte toda la venta.
+        // Descuenta del inventario propio o registra la deuda con la tienda.
+        // Si algo falla, se revierte toda la venta.
         for (SaleItem item : saved.getItems()) {
-            if (item.getFraction() == null) {
+            Partner partner = externas.get(item);
+            if (partner != null) {
+                Borrowing b = new Borrowing();
+                b.setPartner(partner);
+                b.setProduct(item.getProduct());
+                b.setQuantity(item.getQuantity());
+                b.setUnitCost(item.getCost());
+                b.setSaleId(saved.getId());
+                b.setRegisteredBy(usuario);
+                b = borrowingRepository.save(b);
+                item.setBorrowingId(b.getId());
+            } else if (item.getFraction() == null) {
                 stockService.registrarSalida(
                         item.getProduct().getId(), item.getQuantity(), saved.getId());
             } else {
@@ -177,6 +231,87 @@ public class SaleService {
         return SaleResponse.from(sale, admin);
     }
 
+    @Transactional
+    public SaleResponse anular(Long id, CancelSaleRequest request) {
+        Sale sale = saleRepository.findForUpdateById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Venta no encontrada: " + id));
+
+        if (sale.getStatus() == SaleStatus.ANULADA) {
+            throw new IllegalArgumentException("La venta #" + id + " ya está anulada");
+        }
+
+        // Una deuda ya pagada o devuelta no se puede deshacer sola
+        List<Borrowing> deudas = borrowingRepository.findBySaleId(id);
+        for (Borrowing b : deudas) {
+            if (b.getStatus() == BorrowingStatus.PAGADO || b.getStatus() == BorrowingStatus.DEVUELTO) {
+                throw new IllegalArgumentException(
+                        "No se puede anular: el préstamo #" + b.getId() + " con "
+                                + b.getPartner().getName() + " ya fue "
+                                + b.getStatus().name().toLowerCase()
+                                + ". Resuélvelo con la tienda primero");
+            }
+        }
+
+        for (SaleItem item : sale.getItems()) {
+            if (item.getBorrowingId() != null) {
+                continue; // no tocó tu stock
+            }
+            if (item.getFraction() == null) {
+                stockService.reponer(item.getProduct().getId(), item.getQuantity(), sale.getId());
+            } else {
+                devolverAlBalde(item);
+            }
+        }
+
+        for (Borrowing b : deudas) {
+            if (b.getStatus() == BorrowingStatus.PENDIENTE) {
+                b.setStatus(BorrowingStatus.CANCELADO);
+                b.setClosedBy(usuarioActual());
+                b.setClosedAt(LocalDateTime.now());
+                b.setNote("Venta #" + id + " anulada");
+            }
+        }
+
+        sale.setStatus(SaleStatus.ANULADA);
+        sale.setCancelledBy(usuarioActual());
+        sale.setCancelledAt(LocalDateTime.now());
+        sale.setCancelReason(request.reason().trim());
+
+        return SaleResponse.from(sale, true);
+    }
+
+    private void devolverAlBalde(SaleItem item) {
+        BigDecimal amount = item.getFraction().getValue()
+                .multiply(BigDecimal.valueOf(item.getQuantity()));
+
+        if (item.getContainerId() == null) {
+            throw new IllegalStateException("La línea fraccionada no tiene balde asociado");
+        }
+
+        OpenContainer container = containerRepository.findForUpdateById(item.getContainerId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Balde no encontrado: " + item.getContainerId()));
+
+        if (container.getStatus() == ContainerStatus.BAJA) {
+            throw new IllegalArgumentException(
+                    "El balde #" + container.getId()
+                            + " fue dado de baja; no se puede devolver el contenido");
+        }
+
+        BigDecimal nuevo = container.getRemaining().add(amount);
+        if (nuevo.compareTo(BigDecimal.ONE) > 0) {
+            throw new IllegalArgumentException(
+                    "El balde #" + container.getId()
+                            + " excedería su capacidad; revisa los ajustes");
+        }
+
+        container.setRemaining(nuevo);
+        if (container.getStatus() == ContainerStatus.VACIO) {
+            container.setStatus(ContainerStatus.ABIERTO);
+            container.setClosedAt(null);
+        }
+    }
+
     private void descontarFraccion(SaleItem item, Long saleId, String usuario) {
         Product product = item.getProduct();
         BigDecimal needed = item.getFraction().getValue()
@@ -193,11 +328,9 @@ public class SaleService {
 
         OpenContainer container;
         if (!usables.isEmpty()) {
-            // Usa el balde abierto más antiguo que alcance
             container = usables.get(0);
             container.setRemaining(container.getRemaining().subtract(needed));
         } else {
-            // Ninguno alcanza: abre uno nuevo (baja 1 del stock cerrado)
             container = new OpenContainer();
             container.setProduct(product);
             container.setRemaining(BigDecimal.ONE.subtract(needed));

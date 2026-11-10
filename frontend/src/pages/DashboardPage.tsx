@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Package, CheckCircle2, TriangleAlert, Wallet } from "lucide-react";
 import StatCard from "../components/ui/StatCard";
 import Badge from "../components/ui/Badge";
+import AdminSummary from "../features/dashboard/AdminSummary";
 import { useAuth } from "../features/auth/AuthContext";
 import { useProductRows } from "../features/products/useProductRows";
 import { useMovements } from "../features/stock/useStock";
@@ -40,6 +41,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-slate-800">Inicio</h2>
+
+      {isAdmin && <AdminSummary />}
 
       <div
         className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${

@@ -32,6 +32,11 @@ public class OpenContainer {
 
     private LocalDateTime closedAt;
 
+    // Quién lo dio de baja (null si sigue abierto o se vació por ventas)
+    @Column(length = 50)
+    private String closedBy;
+
+    // Motivo de la última baja o ajuste
     @Column(length = 200)
     private String note;
 
@@ -41,17 +46,27 @@ public class OpenContainer {
     }
 
     public Long getId() { return id; }
+
     public Product getProduct() { return product; }
     public void setProduct(Product product) { this.product = product; }
+
     public BigDecimal getRemaining() { return remaining; }
     public void setRemaining(BigDecimal remaining) { this.remaining = remaining; }
+
     public ContainerStatus getStatus() { return status; }
     public void setStatus(ContainerStatus status) { this.status = status; }
+
     public String getOpenedBy() { return openedBy; }
     public void setOpenedBy(String openedBy) { this.openedBy = openedBy; }
+
     public LocalDateTime getOpenedAt() { return openedAt; }
+
     public LocalDateTime getClosedAt() { return closedAt; }
     public void setClosedAt(LocalDateTime closedAt) { this.closedAt = closedAt; }
+
+    public String getClosedBy() { return closedBy; }
+    public void setClosedBy(String closedBy) { this.closedBy = closedBy; }
+
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
 }

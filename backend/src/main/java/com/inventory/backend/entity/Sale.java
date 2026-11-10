@@ -37,6 +37,15 @@ public class Sale {
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    // Datos de anulación (null si la venta está completada)
+    @Column(length = 50)
+    private String cancelledBy;
+
+    private LocalDateTime cancelledAt;
+
+    @Column(length = 200)
+    private String cancelReason;
+
     @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SaleItem> items = new ArrayList<>();
 
@@ -51,18 +60,35 @@ public class Sale {
     }
 
     public Long getId() { return id; }
+
     public String getCustomerName() { return customerName; }
     public void setCustomerName(String customerName) { this.customerName = customerName; }
+
     public PaymentMethod getPaymentMethod() { return paymentMethod; }
     public void setPaymentMethod(PaymentMethod paymentMethod) { this.paymentMethod = paymentMethod; }
+
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
+
     public BigDecimal getTotal() { return total; }
     public void setTotal(BigDecimal total) { this.total = total; }
+
     public SaleStatus getStatus() { return status; }
     public void setStatus(SaleStatus status) { this.status = status; }
+
     public String getSoldBy() { return soldBy; }
     public void setSoldBy(String soldBy) { this.soldBy = soldBy; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
+
+    public String getCancelledBy() { return cancelledBy; }
+    public void setCancelledBy(String cancelledBy) { this.cancelledBy = cancelledBy; }
+
+    public LocalDateTime getCancelledAt() { return cancelledAt; }
+    public void setCancelledAt(LocalDateTime cancelledAt) { this.cancelledAt = cancelledAt; }
+
+    public String getCancelReason() { return cancelReason; }
+    public void setCancelReason(String cancelReason) { this.cancelReason = cancelReason; }
+
     public List<SaleItem> getItems() { return items; }
 }

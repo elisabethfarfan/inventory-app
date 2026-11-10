@@ -8,6 +8,8 @@ export interface SaleItemInput {
   unitPrice: number;
   discountReason: string | null;
   fraction: FractionCode | null;
+  partnerId: number | null;
+  externalCost: number | null;
 }
 
 export interface SaleInput {
@@ -24,6 +26,7 @@ export interface SaleItem {
   quantity: number;
   fractionLabel?: string;
   containerId?: number;
+  externalFrom?: string;
   listPrice: number;
   minPrice: number;
   unitPrice: number;
@@ -31,8 +34,8 @@ export interface SaleItem {
   discountPercent: number;
   discountReason?: string;
   subtotal: number;
-  cost?: number;   // solo ADMIN
-  profit?: number; // solo ADMIN
+  cost?: number;
+  profit?: number;
 }
 
 export interface Sale {
@@ -44,7 +47,10 @@ export interface Sale {
   status: "COMPLETADA" | "ANULADA";
   soldBy: string;
   createdAt: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
   totalDiscount: number;
-  totalProfit?: number; // solo ADMIN
+  totalProfit?: number;
   items: SaleItem[];
 }
