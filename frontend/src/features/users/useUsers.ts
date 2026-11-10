@@ -2,8 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getUsers, createUser, updateUser } from "../../api/users";
 import type { UserUpdateInput } from "../../types/user";
 
-export const useUsers = () =>
-  useQuery({ queryKey: ["users"], queryFn: getUsers });
+export const useUsers = (enabled = true) =>
+  useQuery({ queryKey: ["users"], queryFn: getUsers, enabled });
 
 export const useCreateUser = () => {
   const qc = useQueryClient();
@@ -21,3 +21,4 @@ export const useUpdateUser = () => {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
   });
 };
+
